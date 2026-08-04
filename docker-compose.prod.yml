@@ -1,0 +1,32 @@
+services:
+
+  # Réplicas do front — cada uma é só um nginx servindo os arquivos
+  # estáticos já compilados (ver Dockerfile.prod). SEM container_name
+  # (nome fixo impede várias réplicas) e SEM porta publicada direto —
+  # só o load balancer abaixo é publicado.
+  frontend:
+    build:
+      context: .
+      dockerfile: dockerfile.prod
+
+    restart: always
+
+    expose:
+      - "80"
+
+
+  # Load balancer na frente das réplicas do front. Publica na mesma porta
+  # 5173 de antes — o backend já libera CORS pra http://localhost:5173,
+  # então não precisa mexer em nada lá.
+  nginx:
+    image: nginx:alpine
+    restart: always
+
+    volumes:
+      - ./nginx.lb.conf:/etc/nginx/nginx.conf:ro
+
+    ports:
+      - "5173:80"
+
+    depends_on:
+      - frontend
