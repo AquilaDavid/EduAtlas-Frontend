@@ -8,7 +8,7 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"
 
         CONTAINER_NAME = 'eduatlas-frontend-test'
-        TEST_PORT = '8081'
+        DOCKER_NETWORK = 'eduatlas-network'
     }
 
     stages {
@@ -18,8 +18,7 @@ pipeline {
                 echo '========== Cleanup =========='
 
                 sh '''
-                    docker stop ${CONTAINER_NAME} >/dev/null 2>&1 || true
-                    docker rm ${CONTAINER_NAME} >/dev/null 2>&1 || true
+                    docker rm -f ${CONTAINER_NAME} >/dev/null 2>&1 || true
                 '''
             }
         }
@@ -55,7 +54,7 @@ pipeline {
                 sh '''
                     docker run -d \
                     --name ${CONTAINER_NAME} \
-                    -p ${TEST_PORT}:80 \
+                    --network ${DOCKER_NETWORK} \
                     ${DOCKERHUB_USER}/${IMAGE_NAME}:${IMAGE_TAG}
                 '''
 
@@ -68,7 +67,7 @@ pipeline {
                 echo '========== Smoke Test =========='
 
                 sh '''
-                    curl --fail http://localhost:${TEST_PORT}
+                    curl --fail http://${CONTAINER_NAME}
                 '''
             }
         }
@@ -106,8 +105,7 @@ pipeline {
         always {
 
             sh '''
-                docker stop ${CONTAINER_NAME} >/dev/null 2>&1 || true
-                docker rm ${CONTAINER_NAME} >/dev/null 2>&1 || true
+                docker rm -f ${CONTAINER_NAME} >/dev/null 2>&1 || true
             '''
         }
 
