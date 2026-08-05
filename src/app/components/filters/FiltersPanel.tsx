@@ -1,7 +1,6 @@
 import { CalendarRange, MapPin, Building2, BarChart3, GitCompareArrows, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import { FilterGroup, FilterField } from "./FilterField";
 import { SelectField } from "./SelectField";
-import { SeletorEstados, SeletorMunicipios, SeletorEscolas } from "./EntitySelector";
 import { Checkbox } from "../ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
