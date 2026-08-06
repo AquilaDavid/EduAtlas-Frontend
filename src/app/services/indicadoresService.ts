@@ -25,32 +25,13 @@ export function getIndicadores(f: FilterState): Promise<IndicadoresResponse> {
   return cachedGet<IndicadoresResponse>("/indicadores", buildIndicadoresParams(f));
 }
 
-// Endpoint 1b: soma agregada de TODA a tabela filtrada (sem paginação).
-// GET /indicadores/resumo?ano&co_entidade&sg_uf&co_uf&co_municipio&tp_dependencia&tp_localizacao
+// Endpoint 2: Resumo agregado — soma TODOS os registros que casam com o
+// filtro (sem paginação), usado pelos cards de totais por etapa (EtapaCards).
+// Reaproveita os mesmos filtros geográficos/de dependência do dashboard, mas
+// nunca envia pagina/limite/ordenacao, já que o backend soma tudo sem LIMIT.
+// ATENÇÃO: confirme o path real da rota em indicador_routes.py — pode ser
+// "/indicadores/resumo" ou outro nome.
 export function getResumoIndicadores(f: FilterState): Promise<ResumoIndicadores> {
-  return cachedGet<ResumoIndicadores>("/indicadores/resumo", buildIndicadoresParams(f));
-}
-
-// Ranking de escolas dentro de UM único município (drill-down a partir do
-// Ranking de municípios). Reaproveita /indicadores — já devolve exatamente
-// o que precisamos por escola (nome, UF, dependência, matrículas) e já
-// aceita co_municipio + tp_dependencia (para "isolar" o ranking por
-// dependência) + ordenação por qt_mat_total desc.
-export function getEscolasRankingMunicipio(params: {
-  ano: number;
-  sg_uf: string;
-  co_municipio: string;
-  tp_dependencia: number[];
-  limite?: number;
-}): Promise<IndicadoresResponse> {
-  return cachedGet<IndicadoresResponse>("/indicadores", {
-    ano: params.ano,
-    sg_uf: params.sg_uf,
-    co_municipio: params.co_municipio,
-    tp_dependencia: params.tp_dependencia.length ? params.tp_dependencia.join(",") : "",
-    ordenar_por: "qt_mat_total",
-    ordem: "desc",
-    pagina: 1,
-    limite: params.limite ?? 100,
-  });
+  const { pagina, limite, ordenar_por, ordem, ...paramsResumo } = buildIndicadoresParams(f);
+  return cachedGet<ResumoIndicadores>("/indicadores/resumo", paramsResumo);
 }

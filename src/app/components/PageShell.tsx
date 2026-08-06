@@ -1,10 +1,15 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { motion } from "motion/react";
+import { SlidersHorizontal } from "lucide-react";
 import { FiltersPanel, type PanelConfig } from "./filters/FiltersPanel";
+import { Button } from "./ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "./ui/sheet";
 import type { UseFiltersReturn } from "../hooks/useFilters";
 import type { Option } from "../data/types";
 
-// Estrutura padrão das telas: cabeçalho + painel de filtros (sticky) + conteúdo.
+// Estrutura padrão das telas: cabeçalho + painel de filtros + conteúdo.
+// A partir de lg o painel fica fixo na lateral; abaixo disso vira uma gaveta
+// aberta pelo botão "Filtros", para não empurrar o conteúdo no celular.
 export function PageShell({
   titulo,
   descricao,
@@ -20,11 +25,23 @@ export function PageShell({
   escolaOptions?: Option[];
   children: ReactNode;
 }) {
+  const [gaveta, setGaveta] = useState(false);
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-5 sm:gap-8">
-      <aside className="lg:sticky lg:top-24 self-start bg-card border border-border rounded-lg p-4 sm:p-6">
+    <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 lg:gap-8">
+      <aside className="hidden lg:block lg:sticky lg:top-24 self-start bg-card border border-border rounded-lg p-6">
         <FiltersPanel filtersApi={filtersApi} config={config} escolaOptions={escolaOptions} />
       </aside>
+
+      <Sheet open={gaveta} onOpenChange={setGaveta}>
+        <SheetContent side="left" className="w-[88vw] max-w-sm overflow-y-auto p-6">
+          <SheetHeader className="p-0 mb-4">
+            <SheetTitle>Filtros</SheetTitle>
+            <SheetDescription>Ajuste o recorte dos dados exibidos.</SheetDescription>
+          </SheetHeader>
+          <FiltersPanel filtersApi={filtersApi} config={config} escolaOptions={escolaOptions} />
+        </SheetContent>
+      </Sheet>
 
       <div className="flex flex-col gap-5 sm:gap-6 min-w-0">
         <motion.header
@@ -33,9 +50,21 @@ export function PageShell({
           transition={{ duration: 0.35 }}
           className="flex flex-col gap-1"
         >
-          <h1 className="tracking-tight text-xl sm:text-2xl">{titulo}</h1>
+          <h1 className="tracking-tight">{titulo}</h1>
           <p className="text-sm text-muted-foreground">{descricao}</p>
         </motion.header>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="lg:hidden self-start gap-2"
+          onClick={() => setGaveta(true)}
+        >
+          <SlidersHorizontal className="size-4" aria-hidden />
+          Filtros
+        </Button>
+
         {children}
       </div>
     </div>

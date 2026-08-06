@@ -53,7 +53,7 @@ export function DemoBanner() {
 // ── Skeletons ────────────────────────────────────────────────────────────────
 export function SkeletonCards({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="rounded-md border border-border bg-card p-4 flex flex-col gap-3">
           <Skeleton className="h-3 w-16" />

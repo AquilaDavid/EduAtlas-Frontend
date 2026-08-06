@@ -2,18 +2,21 @@ import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaCh
 import type { EvolucaoPonto } from "../../data/types";
 import { fmtInt } from "../../data/options";
 import type { ChartType } from "./ChartTypeToggle";
+import { useIsMobile } from "../ui/use-mobile";
 
 const axisStyle = { fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fill: "var(--muted-foreground)" } as const;
 
 // Evolução temporal do indicador — linha contínua (área) ou colunas.
 export function EvolucaoChart({ pontos, nome, tipo }: { pontos: EvolucaoPonto[]; nome: string; tipo: ChartType }) {
+  // No celular: altura menor e eixo Y mais estreito.
+  const compacto = useIsMobile();
   const data = pontos.map((p) => ({ ano: String(p.ano), valor: p.valor }));
   const shortFmt = (v: number) => (v >= 1000 ? `${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}k` : String(v));
 
   const eixos = [
     <CartesianGrid key="grid" strokeDasharray="2 4" stroke="var(--border)" vertical={false} />,
     <XAxis key="x" dataKey="ano" tick={axisStyle} axisLine={false} tickLine={false} dy={6} />,
-    <YAxis key="y" tick={axisStyle} axisLine={false} tickLine={false} tickFormatter={shortFmt} width={56} />,
+    <YAxis key="y" tick={axisStyle} axisLine={false} tickLine={false} tickFormatter={shortFmt} width={compacto ? 40 : 56} />,
     <Tooltip
       key="tt"
       cursor={tipo === "linhas" ? { stroke: "var(--border)" } : { fill: "var(--secondary)", opacity: 0.5 }}
@@ -24,7 +27,7 @@ export function EvolucaoChart({ pontos, nome, tipo }: { pontos: EvolucaoPonto[];
   ];
 
   return (
-    <ResponsiveContainer width="100%" height={380}>
+    <ResponsiveContainer width="100%" height={compacto ? 280 : 380}>
       {tipo === "linhas" ? (
         <AreaChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
           <defs>

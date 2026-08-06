@@ -6,11 +6,13 @@ import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { Button } from "../ui/button";
 import type { UseFiltersReturn } from "../../hooks/useFilters";
-import { useUfs, useMunicipios, useEscolas } from "../../hooks/useLocalizacoes";
+import { useUfs, useMunicipios, useEscolas, useAlvosComparacao } from "../../hooks/useLocalizacoes";
 import {
   ANOS, DEPENDENCIAS, LOCALIZACOES, INDICADORES, ORDENAR_POR, ORDENS, LIMITES,
+  MAX_ALVOS, corSerie,
 } from "../../data/options";
-import type { LocalizacaoFiltro, Option, Ordem, LocalComparado } from "../../data/types";
+import type { LocalizacaoFiltro, Option, Ordem } from "../../data/types";
+import { MultiSelectField } from "./MultiSelectField";
 
 const ALL = "__all__";
 const anosOptions: Option[] = ANOS.map((a) => ({ value: String(a), label: String(a) }));
@@ -24,54 +26,72 @@ export interface PanelConfig {
   dependencia?: boolean; // múltipla (checkboxes)
   dependenciaUnica?: boolean; // única (radio) — usada no Ranking
   localizacao?: boolean;
+  comparacao?: boolean; // comparar estados/municípios/escolas entre si
   indicador?: boolean;
   ordenacao?: boolean;
   paginacao?: boolean;
   limite?: boolean;
 }
 
-// Estado do comparador "Padrão / Por local" — quando presente, o painel
-// mostra a alternância + a lista de locais, e (no modo local) esconde
-// Estado/Município/Escola/Dependência, que deixam de fazer sentido como
-// filtro único (cada local da lista já tem os seus).
-export interface ComparadorConfig {
-  ativo: boolean; // true quando o modo atual é "por local"
-  labelPadrao: string; // rótulo do botão do modo padrão, ex. "Por dependência"
-  onModoChange: (local: boolean) => void;
-  locais: LocalComparado[];
-  onLocaisChange: (locais: LocalComparado[]) => void;
-}
-
 export function FiltersPanel({
   filtersApi,
   config,
   escolaOptions = [],
-  comparador,
 }: {
   filtersApi: UseFiltersReturn;
   config: PanelConfig;
   escolaOptions?: Option[];
-  comparador?: ComparadorConfig;
 }) {
-  const { filters, set, setUf, setMunicipio, setEscola, toggleDependencia, reset } = filtersApi;
+  const { filters, set, setUf, setMunicipio, setEscola, toggleDependencia, setComparacao, limparComparacao, reset } = filtersApi;
 
   const ufs = useUfs();
   const municipios = useMunicipios(filters.sg_uf);
   const escolas = useEscolas(filters.sg_uf, filters.co_municipio);
+  const cmp = useAlvosComparacao(filters);
+
+  // Cor de uma entidade — mesma do gráfico, para o painel e a legenda baterem.
+  const corDaChave = (chave: string) => {
+    const i = cmp.indiceDaChave.get(chave);
+    return i === undefined ? undefined : corSerie(i);
+  };
+
+  // Orçamento restante de séries, distribuído entre os três níveis.
+  const vagas = (jaNoNivel: number) => jaNoNivel + Math.max(0, MAX_ALVOS - cmp.alvos.length);
+
+  // Ao desmarcar um estado, remove só os municípios/escolas que dependiam dele.
+  const trocarUfs = (comparar_ufs: string[]) => {
+    const municipiosValidos = new Set(
+      cmp.municipiosData.filter((m) => comparar_ufs.includes(m.sg_uf)).map((m) => m.co_municipio),
+    );
+    const comparar_municipios = filters.comparar_municipios.filter((c) => municipiosValidos.has(c));
+    const escolasValidas = new Set(
+      cmp.escolasData.filter((e) => comparar_municipios.includes(e.co_municipio)).map((e) => e.co_entidade),
+    );
+    setComparacao({
+      comparar_ufs,
+      comparar_municipios,
+      comparar_escolas: filters.comparar_escolas.filter((c) => escolasValidas.has(c)),
+    });
+  };
+
+  const trocarMunicipios = (comparar_municipios: string[]) => {
+    const escolasValidas = new Set(
+      cmp.escolasData.filter((e) => comparar_municipios.includes(e.co_municipio)).map((e) => e.co_entidade),
+    );
+    setComparacao({
+      comparar_municipios,
+      comparar_escolas: filters.comparar_escolas.filter((c) => escolasValidas.has(c)),
+    });
+  };
 
   // As instituições vêm da API (cascata pela cidade); o prop é apenas um fallback.
   const escolasOpts: Option[] = escolas.data.length
     ? escolas.data.map((e) => ({ value: e.co_entidade, label: e.no_entidade }))
     : escolaOptions;
 
-  const modoLocalAtivo = comparador?.ativo ?? false;
-
   const showTempo = config.ano || config.periodo;
-  const showLocal = (config.estado || config.municipio) && !modoLocalAtivo;
-  const mostrarEscola = config.escola && !modoLocalAtivo;
-  const mostrarDependencia = (config.dependencia || config.dependenciaUnica) && !modoLocalAtivo;
-  const mostrarLocalizacao = config.localizacao; // filtro compartilhado — vale mesmo no modo "por local"
-  const showInst = mostrarEscola || mostrarDependencia || mostrarLocalizacao;
+  const showLocal = config.estado || config.municipio;
+  const showInst = config.escola || config.dependencia || config.dependenciaUnica || config.localizacao;
   const depUnica = filters.tp_dependencia.length === 1 ? String(filters.tp_dependencia[0]) : "";
   const showDados = config.indicador || config.ordenacao || config.paginacao || config.limite;
 
@@ -84,43 +104,6 @@ export function FiltersPanel({
         </Button>
       </div>
 
-      {/* ── Comparar por local (opcional) ── */}
-      {comparador && (
-        <FilterGroup title="Comparar" icon={<GitCompareArrows size={14} />}>
-          <FilterField label="Modo de comparação">
-            <ToggleGroup
-              type="single"
-              value={modoLocalAtivo ? "local" : "padrao"}
-              onValueChange={(v) => v && comparador.onModoChange(v === "local")}
-              className="w-full justify-stretch gap-2"
-            >
-              <ToggleGroupItem value="padrao" className="flex-1 border border-border data-[state=on]:border-accent data-[state=on]:bg-accent/10 data-[state=on]:text-accent text-sm">
-                {comparador.labelPadrao}
-              </ToggleGroupItem>
-              <ToggleGroupItem value="local" className="flex-1 border border-border data-[state=on]:border-accent data-[state=on]:bg-accent/10 data-[state=on]:text-accent text-sm">
-                Por local
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </FilterField>
-
-          {modoLocalAtivo && (
-            <div className="flex flex-col gap-4">
-              <FilterField label="Estados" hint="seleção múltipla">
-                <SeletorEstados locais={comparador.locais} onChange={comparador.onLocaisChange} />
-              </FilterField>
-
-              <FilterField label="Municípios" hint="seleção múltipla — de qualquer estado">
-                <SeletorMunicipios locais={comparador.locais} onChange={comparador.onLocaisChange} />
-              </FilterField>
-
-              <FilterField label="Escolas" hint="seleção múltipla — de qualquer município">
-                <SeletorEscolas locais={comparador.locais} onChange={comparador.onLocaisChange} />
-              </FilterField>
-            </div>
-          )}
-        </FilterGroup>
-      )}
-
       {/* ── Tempo ── */}
       {showTempo && (
         <FilterGroup title="Tempo" icon={<CalendarRange size={14} />}>
@@ -131,6 +114,59 @@ export function FiltersPanel({
             <div className="grid grid-cols-2 gap-3">
               <SelectField label="Ano inicial" value={String(filters.ano_inicial)} onChange={(v) => set("ano_inicial", Number(v))} options={anosOptions} />
               <SelectField label="Ano final" value={String(filters.ano_final)} onChange={(v) => set("ano_final", Number(v))} options={anosOptions} />
+            </div>
+          )}
+        </FilterGroup>
+      )}
+
+      {/* ── Comparar entidades (multisseleção nos três níveis) ── */}
+      {config.comparacao && (
+        <FilterGroup title="Comparar" icon={<GitCompareArrows size={14} />}>
+          <MultiSelectField
+            label="Estados"
+            hint="comparar_ufs"
+            values={filters.comparar_ufs}
+            onChange={trocarUfs}
+            options={cmp.opcoesUfs}
+            placeholder={cmp.loadingUfs ? "Carregando…" : "Selecione um ou mais estados"}
+            max={vagas(filters.comparar_ufs.length)}
+            cor={(v) => corDaChave(`uf:${v}`)}
+          />
+
+          <MultiSelectField
+            label="Municípios"
+            hint="comparar_municipios"
+            values={filters.comparar_municipios}
+            onChange={trocarMunicipios}
+            options={cmp.opcoesMunicipios}
+            placeholder={cmp.loadingMunicipios ? "Carregando…" : "Selecione um ou mais municípios"}
+            disabled={filters.comparar_ufs.length === 0}
+            disabledHint="Marque estados acima para listar os municípios"
+            max={vagas(filters.comparar_municipios.length)}
+            cor={(v) => corDaChave(`mun:${v}`)}
+          />
+
+          <MultiSelectField
+            label="Escolas"
+            hint="comparar_escolas"
+            values={filters.comparar_escolas}
+            onChange={(comparar_escolas) => setComparacao({ comparar_escolas })}
+            options={cmp.opcoesEscolas}
+            placeholder={cmp.loadingEscolas ? "Carregando…" : "Selecione uma ou mais escolas"}
+            disabled={filters.comparar_municipios.length === 0}
+            disabledHint="Marque municípios acima para listar as escolas"
+            max={vagas(filters.comparar_escolas.length)}
+            cor={(v) => corDaChave(`esc:${v}`)}
+          />
+
+          {cmp.alvos.length > 0 && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-mono text-muted-foreground">
+                {cmp.alvos.length} de {MAX_ALVOS} entidades no gráfico
+              </span>
+              <Button variant="ghost" size="sm" onClick={limparComparacao} className="h-7 text-xs text-muted-foreground">
+                Limpar comparação
+              </Button>
             </div>
           )}
         </FilterGroup>
@@ -166,7 +202,7 @@ export function FiltersPanel({
       {/* ── Instituição ── */}
       {showInst && (
         <FilterGroup title="Instituição" icon={<Building2 size={14} />}>
-          {mostrarEscola && (
+          {config.escola && (
             <SelectField
               label="Escola"
               hint={escolas.loading ? "carregando…" : "co_entidade"}
@@ -181,7 +217,7 @@ export function FiltersPanel({
               options={[{ value: ALL, label: "Todas as escolas" }, ...escolasOpts]}
             />
           )}
-          {config.dependencia && mostrarDependencia && (
+          {config.dependencia && (
             <FilterField label="Dependência administrativa" hint="tp_dependencia">
               <div className="grid grid-cols-2 gap-2">
                 {DEPENDENCIAS.map((d) => {
@@ -200,7 +236,7 @@ export function FiltersPanel({
               </div>
             </FilterField>
           )}
-          {config.dependenciaUnica && mostrarDependencia && (
+          {config.dependenciaUnica && (
             <FilterField label="Dependência administrativa" hint="tp_dependencia (única)">
               <RadioGroup
                 value={depUnica}
@@ -220,7 +256,7 @@ export function FiltersPanel({
               </RadioGroup>
             </FilterField>
           )}
-          {mostrarLocalizacao && (
+          {config.localizacao && (
             <FilterField label="Localização da escola" hint="tp_localizacao">
               <RadioGroup
                 value={filters.tp_localizacao}

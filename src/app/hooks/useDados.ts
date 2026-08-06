@@ -8,8 +8,14 @@ import {
   getComparacoes,
   getEvolucao,
   getRanking,
+  getRankingEscolas,
+  getComparacoesMulti,
+  getEvolucaoMulti,
 } from "../services";
-import { mockIndicadores, mockResumo, mockComparacoes, mockEvolucao, mockRanking } from "../data/mocks";
+import {
+  mockIndicadores, mockResumoIndicadores, mockComparacoes, mockEvolucao, mockRanking, mockRankingEscolas,
+  mockComparacoesMulti, mockEvolucaoMulti,
+} from "../data/mocks";
 import type {
   FilterState,
   IndicadoresResponse,
@@ -17,7 +23,10 @@ import type {
   ComparacaoRow,
   EvolucaoPonto,
   RankingRow,
+  RankingEscolaRow,
+  SerieEntidade,
 } from "../data/types";
+import type { Alvo } from "../services";
 
 const RESP_VAZIA: IndicadoresResponse = { dados: [], total: 0, pagina: 1, limite: 10 };
 
@@ -30,18 +39,20 @@ export function useIndicadores(f: FilterState) {
   });
 }
 
+// Resumo agregado (todos os registros do filtro, não só a página atual) —
+// usado pelos cards de totais por etapa no Dashboard. Note que a chave de
+// cache NÃO inclui pagina/limite/ordenar_por/ordem: o resumo é o mesmo
+// independente da página ou ordenação em que o usuário está.
 const RESUMO_VAZIO: ResumoIndicadores = {
   qt_mat_total: 0, qt_mat_inf: 0, qt_mat_fund: 0,
   qt_mat_med: 0, qt_mat_prof: 0, qt_mat_eja: 0, qt_mat_esp: 0,
 };
 
-// Soma de TODA a tabela filtrada (sem paginação) — para os cards do topo
-// do Dashboard, que não podem depender da página atual da listagem.
 export function useResumoIndicadores(f: FilterState) {
-  const key = `indicadores-resumo:${f.ano}:${f.sg_uf}:${f.co_municipio}:${f.co_entidade}:${f.tp_dependencia.join(",")}:${f.tp_localizacao}`;
+  const key = `resumo-indicadores:${f.ano}:${f.sg_uf}:${f.co_municipio}:${f.co_entidade}:${f.tp_dependencia.join(",")}:${f.tp_localizacao}`;
   return useQuery<ResumoIndicadores>(key, {
     fetcher: () => getResumoIndicadores(f),
-    mock: () => mockResumo(f),
+    mock: () => mockResumoIndicadores(f),
     fallback: RESUMO_VAZIO,
   });
 }
@@ -66,6 +77,31 @@ export function useEvolucao(f: FilterState) {
   });
 }
 
+// ── Comparação entre entidades (uma requisição cacheada por alvo) ───────────
+const LISTA_SERIES: SerieEntidade[] = [];
+
+export function useComparacoesMulti(f: FilterState, alvos: Alvo[], metrica: "qt_matriculas" | "qt_escolas") {
+  const chaves = alvos.map((a) => a.chave).join("|");
+  const key = `cmp-multi:${chaves}:${metrica}:${f.ano_inicial}:${f.ano_final}:${f.sg_uf}:${f.co_municipio}:${f.tp_dependencia.join(",")}:${f.tp_localizacao}`;
+  return useQuery<SerieEntidade[]>(key, {
+    fetcher: () => getComparacoesMulti(f, alvos, metrica),
+    mock: () => mockComparacoesMulti(f, alvos, metrica),
+    enabled: alvos.length > 0,
+    fallback: LISTA_SERIES,
+  });
+}
+
+export function useEvolucaoMulti(f: FilterState, alvos: Alvo[]) {
+  const chaves = alvos.map((a) => a.chave).join("|");
+  const key = `evo-multi:${chaves}:${f.indicador}:${f.ano_inicial}:${f.ano_final}:${f.sg_uf}:${f.co_municipio}:${f.tp_dependencia.join(",")}:${f.tp_localizacao}`;
+  return useQuery<SerieEntidade[]>(key, {
+    fetcher: () => getEvolucaoMulti(f, alvos),
+    mock: () => mockEvolucaoMulti(f, alvos),
+    enabled: alvos.length > 0,
+    fallback: LISTA_SERIES,
+  });
+}
+
 const LISTA_RANK: RankingRow[] = [];
 export function useRanking(f: FilterState) {
   const key = `ranking:${f.ano}:${f.sg_uf}:${f.co_municipio}:${f.co_entidade}:${f.tp_dependencia.join(",")}:${f.tp_localizacao}:${f.limite}`;
@@ -73,5 +109,24 @@ export function useRanking(f: FilterState) {
     fetcher: () => getRanking(f),
     mock: () => mockRanking(f),
     fallback: LISTA_RANK,
+  });
+}
+
+// Ranking das escolas de um município — alimenta o painel aberto ao clicar numa
+// linha do ranking. Só dispara quando há um município selecionado.
+// tp_dependencia (opcional) isola o ranking dentro de uma única dependência.
+export function useRankingEscolas(
+  sg_uf: string,
+  co_municipio: string,
+  ano: number,
+  limite: number,
+  tp_dependencia: number[] = [],
+) {
+  const key = `ranking-escolas:${sg_uf}:${co_municipio}:${ano}:${limite}:${tp_dependencia.join(",")}`;
+  return useQuery<RankingEscolaRow[]>(key, {
+    fetcher: () => getRankingEscolas(sg_uf, co_municipio, ano, limite, tp_dependencia),
+    mock: () => mockRankingEscolas(sg_uf, co_municipio, ano, limite, tp_dependencia),
+    fallback: [],
+    enabled: Boolean(co_municipio),
   });
 }

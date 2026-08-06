@@ -12,10 +12,14 @@ import type {
   ComparacaoRow,
   EvolucaoPonto,
   RankingRow,
+  RankingEscolaRow,
   DependenciaNome,
-  Dependencia,
+  SerieEntidade,
+  MunicipioUf,
+  EscolaMunicipio,
 } from "./types";
 import { DEP_LABEL } from "./options";
+import { filtrosDoAlvo, type Alvo } from "../services/multiService";
 
 // ── PRNG determinístico ──────────────────────────────────────────────────────
 function hash(str: string): number {
@@ -87,55 +91,15 @@ export function mockEscolas(sg_uf: string, co_municipio: string): Escola[] {
     escolas.push({
       co_entidade: `${co_municipio}${String(100 + i).padStart(4, "0")}`,
       no_entidade: `${ESCOLA_PREFIXOS[i % ESCOLA_PREFIXOS.length]} ${ESCOLA_NOMES[Math.floor(rand() * ESCOLA_NOMES.length)]}`,
-      tp_dependencia: (1 + Math.floor(rand() * 4)) as Dependencia,
+      tp_dependencia: 1 + Math.floor(rand() * 4),
     });
   }
   return escolas.sort((a, b) => a.no_entidade.localeCompare(b.no_entidade, "pt-BR"));
 }
 
-// Ranking de escolas de UM município (drill-down do Ranking) — espelha o
-// que /indicadores?co_municipio=X&ordenar_por=qt_mat_total&ordem=desc real
-// devolveria, incluindo o filtro opcional de "isolar" por dependência.
-export function mockEscolasRankingMunicipio(
-  ano: number,
-  sg_uf: string,
-  co_municipio: string,
-  tp_dependencia: number[],
-): IndicadorRow[] {
-  const escolas = mockEscolas(sg_uf, co_municipio);
-  const rand = seeded(hash(`esc-rank-${ano}-${sg_uf}-${co_municipio}`));
-
-  let linhas: IndicadorRow[] = escolas.map((e) => {
-    const total = Math.round(80 + rand() * 1800);
-    return {
-      co_entidade: e.co_entidade,
-      no_entidade: e.no_entidade,
-      sg_uf,
-      co_municipio,
-      no_municipio: "",
-      tp_dependencia: e.tp_dependencia,
-      tp_localizacao: 1,
-      qt_mat_total: total,
-      qt_mat_bas: total,
-      qt_mat_inf: 0,
-      qt_mat_fund: 0,
-      qt_mat_med: 0,
-      qt_mat_prof: 0,
-      qt_mat_eja: 0,
-      qt_mat_esp: 0,
-    };
-  });
-
-  if (tp_dependencia.length) {
-    linhas = linhas.filter((l) => tp_dependencia.includes(l.tp_dependencia));
-  }
-
-  return linhas.sort((a, b) => b.qt_mat_total - a.qt_mat_total);
-}
-
 function gerarLinha(f: FilterState, i: number): IndicadorRow {
   const rand = seeded(hash(`ind-${f.ano}-${f.sg_uf}-${f.co_municipio}-${f.tp_localizacao}-${i}`));
-  const dep = (f.tp_dependencia.length ? f.tp_dependencia[i % f.tp_dependencia.length] : ((i % 4) + 1)) as Dependencia;
+  const dep = f.tp_dependencia.length ? f.tp_dependencia[i % f.tp_dependencia.length] : ((i % 4) + 1);
   const base = 120 + rand() * 2400;
   const inf = Math.round(base * (0.1 + rand() * 0.15));
   const fund = Math.round(base * (0.35 + rand() * 0.2));
@@ -174,25 +138,28 @@ export function mockIndicadores(f: FilterState): IndicadoresResponse {
   return { dados, total, pagina: f.pagina, limite: f.limite };
 }
 
-// Soma agregada de TODAS as 137 escolas simuladas (não só da página atual) —
-// espelha o /indicadores/resumo real, que agrega no banco antes de paginar.
-export function mockResumo(f: FilterState): ResumoIndicadores {
-  const total = 137;
-  const acumulado: ResumoIndicadores = {
+// Resumo agregado — soma TODAS as `total` linhas simuladas (não só a página
+// atual), pra espelhar o comportamento real do backend (SUM sem LIMIT).
+// Reaproveita o mesmo gerador (`gerarLinha`) usado por `mockIndicadores`, então
+// os números batem exatamente com o que apareceria se você somasse manualmente
+// todas as páginas.
+export function mockResumoIndicadores(f: FilterState): ResumoIndicadores {
+  const total = 137; // mesmo total simulado de mockIndicadores
+  const acc: ResumoIndicadores = {
     qt_mat_total: 0, qt_mat_inf: 0, qt_mat_fund: 0,
     qt_mat_med: 0, qt_mat_prof: 0, qt_mat_eja: 0, qt_mat_esp: 0,
   };
   for (let i = 0; i < total; i++) {
     const linha = gerarLinha(f, i);
-    acumulado.qt_mat_total += linha.qt_mat_total;
-    acumulado.qt_mat_inf += linha.qt_mat_inf;
-    acumulado.qt_mat_fund += linha.qt_mat_fund;
-    acumulado.qt_mat_med += linha.qt_mat_med;
-    acumulado.qt_mat_prof += linha.qt_mat_prof;
-    acumulado.qt_mat_eja += linha.qt_mat_eja;
-    acumulado.qt_mat_esp += linha.qt_mat_esp;
+    acc.qt_mat_total += linha.qt_mat_total;
+    acc.qt_mat_inf += linha.qt_mat_inf;
+    acc.qt_mat_fund += linha.qt_mat_fund;
+    acc.qt_mat_med += linha.qt_mat_med;
+    acc.qt_mat_prof += linha.qt_mat_prof;
+    acc.qt_mat_eja += linha.qt_mat_eja;
+    acc.qt_mat_esp += linha.qt_mat_esp;
   }
-  return acumulado;
+  return acc;
 }
 
 // ── Comparações (por ano × dependência) ──────────────────────────────────────
@@ -245,4 +212,69 @@ export function mockRanking(f: FilterState): RankingRow[] {
   }));
   linhas.sort((a, b) => b.qt_mat_total - a.qt_mat_total);
   return linhas.slice(0, f.limite).map((l, i) => ({ ...l, posicao: i + 1 }));
+}
+
+// Ranking das escolas de um município (detalhamento do ranking).
+export function mockRankingEscolas(
+  sg_uf: string,
+  co_municipio: string,
+  ano: number,
+  limite: number,
+  tp_dependencia: number[] = [],
+): RankingEscolaRow[] {
+  const rand = seeded(hash(`rank-esc-${sg_uf}-${co_municipio}-${ano}`));
+  const municipio = mockMunicipios(sg_uf).find((m) => m.co_municipio === co_municipio);
+  const linhas = mockEscolas(sg_uf, co_municipio)
+    .filter((e) => !tp_dependencia.length || tp_dependencia.includes(e.tp_dependencia))
+    .map((e) => ({
+      co_entidade: e.co_entidade,
+      no_entidade: e.no_entidade,
+      no_municipio: municipio?.no_municipio ?? "",
+      sg_uf,
+      tp_dependencia: e.tp_dependencia,
+      qt_mat_total: Math.round(80 + rand() * 2400),
+    }));
+  linhas.sort((a, b) => b.qt_mat_total - a.qt_mat_total);
+  return linhas.slice(0, limite).map((l, i) => ({ ...l, posicao: i + 1 }));
+}
+
+// ── Comparação entre entidades (cascata múltipla + uma série por entidade) ───
+export function mockMunicipiosDeUfs(ufs: string[]): MunicipioUf[] {
+  return ufs.flatMap((sg_uf) => mockMunicipios(sg_uf).map((m) => ({ ...m, sg_uf })));
+}
+
+export function mockEscolasDeMunicipios(
+  municipios: { co_municipio: string; sg_uf: string }[],
+): EscolaMunicipio[] {
+  return municipios.flatMap((m) =>
+    mockEscolas(m.sg_uf, m.co_municipio).map((e) => ({ ...e, sg_uf: m.sg_uf, co_municipio: m.co_municipio })),
+  );
+}
+
+function totalPorAnoMock(rows: ComparacaoRow[], metrica: "qt_matriculas" | "qt_escolas"): EvolucaoPonto[] {
+  const porAno = new Map<number, number>();
+  for (const r of rows) porAno.set(r.ano, (porAno.get(r.ano) ?? 0) + r[metrica]);
+  return [...porAno.entries()].map(([ano, valor]) => ({ ano, valor })).sort((a, b) => a.ano - b.ano);
+}
+
+export function mockComparacoesMulti(
+  f: FilterState,
+  alvos: Alvo[],
+  metrica: "qt_matriculas" | "qt_escolas",
+): SerieEntidade[] {
+  return alvos.map((a) => ({
+    chave: a.chave,
+    nome: a.nome,
+    nivel: a.nivel,
+    pontos: totalPorAnoMock(mockComparacoes(filtrosDoAlvo(f, a)), metrica),
+  }));
+}
+
+export function mockEvolucaoMulti(f: FilterState, alvos: Alvo[]): SerieEntidade[] {
+  return alvos.map((a) => ({
+    chave: a.chave,
+    nome: a.nome,
+    nivel: a.nivel,
+    pontos: mockEvolucao(filtrosDoAlvo(f, a)),
+  }));
 }

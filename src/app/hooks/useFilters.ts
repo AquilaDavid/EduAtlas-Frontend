@@ -4,15 +4,18 @@ import { useCallback, useState } from "react";
 import type { FilterState, Uf } from "../data/types";
 
 export const defaultFilters: FilterState = {
-  ano: 2024,
-  ano_inicial: 2015,
-  ano_final: 2024,
+  ano: 2023,
+  ano_inicial: 2019,
+  ano_final: 2023,
   sg_uf: "",
   co_uf: "",
   co_municipio: "",
   co_entidade: "",
   tp_dependencia: [1, 2, 3, 4],
   tp_localizacao: "todas",
+  comparar_ufs: [],
+  comparar_municipios: [],
+  comparar_escolas: [],
   indicador: "qt_mat_total",
   ordenar_por: "qt_mat_total",
   ordem: "desc",
@@ -67,9 +70,23 @@ export function useFilters(initial?: Partial<FilterState>) {
     });
   }, []);
 
+  // Comparação entre entidades — os três níveis são independentes e múltiplos.
+  // Um único setter recebe o patch já podado pelo painel (que conhece a origem
+  // de cada município/escola), evitando seleções órfãs sem apagar as válidas.
+  const setComparacao = useCallback(
+    (patch: Partial<Pick<FilterState, "comparar_ufs" | "comparar_municipios" | "comparar_escolas">>) => {
+      setFilters((prev) => ({ ...prev, ...patch, pagina: 1 }));
+    },
+    [],
+  );
+
+  const limparComparacao = useCallback(() => {
+    setFilters((prev) => ({ ...prev, comparar_ufs: [], comparar_municipios: [], comparar_escolas: [], pagina: 1 }));
+  }, []);
+
   const reset = useCallback(() => setFilters({ ...defaultFilters, ...initial }), [initial]);
 
-  return { filters, set, setUf, setMunicipio, setEscola, toggleDependencia, reset };
+  return { filters, set, setUf, setMunicipio, setEscola, toggleDependencia, setComparacao, limparComparacao, reset };
 }
 
 export type UseFiltersReturn = ReturnType<typeof useFilters>;

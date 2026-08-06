@@ -86,3 +86,28 @@ export const LIMITES: number[] = [10, 25, 50, 100];
 export function fmtInt(v: number): string {
   return Math.round(v).toLocaleString("pt-BR");
 }
+
+// ── Comparação entre entidades ───────────────────────────────────────────────
+// Paleta das séries — uma cor por entidade comparada.
+export const CORES_SERIE: string[] = [
+  "var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)",
+  "#0891b2", "#c2410c", "#7c3aed", "#15803d", "#be123c",
+];
+
+export const corSerie = (i: number): string => CORES_SERIE[i % CORES_SERIE.length];
+
+// Limite total de entidades comparadas ao mesmo tempo, somando os três níveis.
+export const MAX_ALVOS = 10;
+
+// Traço de cada nível, para distinguir estados/municípios/escolas no gráfico.
+export const TRACO_NIVEL: Record<import("./types").NivelEntidade, string | undefined> = {
+  uf: undefined,
+  municipio: "6 3",
+  escola: "2 3",
+};
+
+export const ROTULO_NIVEL: Record<import("./types").NivelEntidade, string> = {
+  uf: "Estado",
+  municipio: "Município",
+  escola: "Escola",
+};

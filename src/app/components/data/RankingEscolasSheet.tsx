@@ -5,26 +5,33 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Badge } from "../ui/badge";
 import { SelectField } from "../filters/SelectField";
 import { SkeletonTable, ErrorState, DemoBanner } from "../feedback";
-import { useQuery } from "../../hooks/useQuery";
-import { getEscolasRankingMunicipio } from "../../services";
-import { mockEscolasRankingMunicipio } from "../../data/mocks";
+import { useRankingEscolas } from "../../hooks/useDados";
 import { DEPENDENCIAS, DEP_LABEL, fmtInt } from "../../data/options";
-import type { RankingRow, IndicadorRow } from "../../data/types";
+import type { RankingRow } from "../../data/types";
 
 const medalha = (pos: number) =>
-  pos === 1 ? "bg-amber-100 text-amber-700" : pos === 2 ? "bg-zinc-100 text-zinc-600" : pos === 3 ? "bg-orange-100 text-orange-700" : "bg-secondary text-muted-foreground";
+  pos === 1
+    ? "bg-amber-100 text-amber-700"
+    : pos === 2
+      ? "bg-zinc-100 text-zinc-600"
+      : pos === 3
+        ? "bg-orange-100 text-orange-700"
+        : "bg-secondary text-muted-foreground";
 
 // Painel lateral: ranking de ESCOLAS de um único município (drill-down a
 // partir do clique numa linha do Ranking de municípios). Reaproveita
-// /indicadores — já ordena por qt_mat_total desc e já filtra por
-// tp_dependencia, permitindo "isolar" o ranking (ex.: só escolas municipais).
+// useRankingEscolas (endpoint /indicadores, já ordenado por qt_mat_total desc),
+// com um filtro local para "isolar" o ranking dentro de uma única dependência
+// (ex.: só escolas municipais).
 export function RankingEscolasSheet({
   municipio,
   ano,
+  limite,
   onOpenChange,
 }: {
   municipio: RankingRow | null;
   ano: number;
+  limite: number;
   onOpenChange: (open: boolean) => void;
 }) {
   const [isolarDependencia, setIsolarDependencia] = useState(""); // "" = todas
@@ -32,20 +39,13 @@ export function RankingEscolasSheet({
   const aberto = municipio !== null;
   const tpDependencia = isolarDependencia ? [Number(isolarDependencia)] : [];
 
-  const key = `ranking-escolas:${ano}:${municipio?.co_municipio ?? ""}:${isolarDependencia}`;
-
-  const { data, loading, error, demo, refetch } = useQuery<IndicadorRow[]>(key, {
-    enabled: aberto,
-    fetcher: () =>
-      getEscolasRankingMunicipio({
-        ano,
-        sg_uf: municipio?.sg_uf ?? "",
-        co_municipio: municipio?.co_municipio ?? "",
-        tp_dependencia: tpDependencia,
-      }).then((r) => r.dados),
-    mock: () => mockEscolasRankingMunicipio(ano, municipio?.sg_uf ?? "", municipio?.co_municipio ?? "", tpDependencia),
-    fallback: [],
-  });
+  const { data, loading, error, demo, refetch } = useRankingEscolas(
+    municipio?.sg_uf ?? "",
+    municipio?.co_municipio ?? "",
+    ano,
+    limite,
+    tpDependencia,
+  );
 
   return (
     <Sheet open={aberto} onOpenChange={onOpenChange}>
@@ -64,7 +64,10 @@ export function RankingEscolasSheet({
             value={isolarDependencia}
             onChange={setIsolarDependencia}
             placeholder="Todas as dependências"
-            options={[{ value: "", label: "Todas as dependências" }, ...DEPENDENCIAS.map((d) => ({ value: String(d.value), label: d.nome }))]}
+            options={[
+              { value: "", label: "Todas as dependências" },
+              ...DEPENDENCIAS.map((d) => ({ value: String(d.value), label: d.nome })),
+            ]}
           />
 
           {demo && <DemoBanner />}
@@ -74,7 +77,9 @@ export function RankingEscolasSheet({
           ) : error ? (
             <ErrorState onRetry={refetch} message="Falha ao carregar as escolas do município." />
           ) : data.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">Nenhuma escola encontrada para esse filtro.</p>
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Nenhuma escola encontrada para esse filtro.
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -96,11 +101,17 @@ export function RankingEscolasSheet({
                       className="border-b border-border transition-colors hover:bg-secondary/50"
                     >
                       <TableCell>
-                        <span className={`grid place-items-center size-7 rounded-full text-xs font-mono font-medium ${medalha(i + 1)}`}>{i + 1}</span>
+                        <span
+                          className={`grid place-items-center size-7 rounded-full text-xs font-mono font-medium ${medalha(escola.posicao)}`}
+                        >
+                          {escola.posicao}
+                        </span>
                       </TableCell>
                       <TableCell className="font-medium text-foreground whitespace-normal">{escola.no_entidade}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="font-normal">{DEP_LABEL[escola.tp_dependencia]}</Badge>
+                        <Badge variant="secondary" className="font-normal">
+                          {DEP_LABEL[escola.tp_dependencia]}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-medium">{fmtInt(escola.qt_mat_total)}</TableCell>
                     </motion.tr>

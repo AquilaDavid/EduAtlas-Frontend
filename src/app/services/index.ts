@@ -5,4 +5,5 @@ export * from "./localizacoesService";
 export * from "./escolasService";
 export * from "./indicadoresService";
 export * from "./comparacoesService";
+export * from "./multiService";
 export * from "./rankingService";

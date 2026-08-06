@@ -4,12 +4,15 @@ import type { ComparacaoRow, DependenciaNome } from "../../data/types";
 import { DEP_COR } from "../../data/options";
 import { fmtInt } from "../../data/options";
 import type { ChartType } from "./ChartTypeToggle";
+import { useIsMobile } from "../ui/use-mobile";
 
 const DEPS: DependenciaNome[] = ["Federal", "Estadual", "Municipal", "Privada"];
 const axisStyle = { fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fill: "var(--muted-foreground)" } as const;
 
 // Por ano, matrículas (ou escolas) por dependência — colunas empilhadas ou linhas.
 export function ComparacaoChart({ rows, metrica, tipo }: { rows: ComparacaoRow[]; metrica: "qt_matriculas" | "qt_escolas"; tipo: ChartType }) {
+  // No celular: altura menor e eixo Y mais estreito.
+  const compacto = useIsMobile();
   const data = useMemo(() => {
     const porAno = new Map<number, Record<string, number | string>>();
     for (const r of rows) {
@@ -26,7 +29,7 @@ export function ComparacaoChart({ rows, metrica, tipo }: { rows: ComparacaoRow[]
   const eixos = [
     <CartesianGrid key="grid" strokeDasharray="2 4" stroke="var(--border)" vertical={false} />,
     <XAxis key="x" dataKey="ano" tick={axisStyle} axisLine={false} tickLine={false} dy={6} />,
-    <YAxis key="y" tick={axisStyle} axisLine={false} tickLine={false} tickFormatter={shortFmt} width={56} />,
+    <YAxis key="y" tick={axisStyle} axisLine={false} tickLine={false} tickFormatter={shortFmt} width={compacto ? 40 : 56} />,
     <Tooltip
       key="tt"
       cursor={tipo === "barras" ? { fill: "var(--secondary)", opacity: 0.5 } : { stroke: "var(--border)" }}
@@ -38,7 +41,7 @@ export function ComparacaoChart({ rows, metrica, tipo }: { rows: ComparacaoRow[]
   ];
 
   return (
-    <ResponsiveContainer width="100%" height={380}>
+    <ResponsiveContainer width="100%" height={compacto ? 280 : 380}>
       {tipo === "barras" ? (
         <BarChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
           {eixos}
