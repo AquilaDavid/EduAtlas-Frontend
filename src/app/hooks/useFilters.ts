@@ -4,9 +4,9 @@ import { useCallback, useState } from "react";
 import type { FilterState, Uf } from "../data/types";
 
 export const defaultFilters: FilterState = {
-  ano: 2023,
-  ano_inicial: 2019,
-  ano_final: 2023,
+  ano: 2024,
+  ano_inicial: 2015,
+  ano_final: 2024,
   sg_uf: "",
   co_uf: "",
   co_municipio: "",
